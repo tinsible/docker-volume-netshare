@@ -130,7 +130,7 @@ func (c cifsDriver) parseHost(r volume.Request) string {
 func (s cifsDriver) mountVolume(name, source, dest string, creds *cifsCreds) error {
 	var opts bytes.Buffer
 
-	opts.WriteString("-o ")
+	opts.WriteString("-o '")
 	var user = creds.user
 	var pass = creds.pass
 	var domain = creds.domain
@@ -169,7 +169,7 @@ func (s cifsDriver) mountVolume(name, source, dest string, creds *cifsCreds) err
 		opts.WriteString(fmt.Sprintf("sec=%s,", security))
 	}
 
-	opts.WriteString("rw ")
+	opts.WriteString("rw' ")
 
 	opts.WriteString(fmt.Sprintf("%s %s", source, dest))
 	cmd := fmt.Sprintf("mount -t cifs %s", opts.String())
