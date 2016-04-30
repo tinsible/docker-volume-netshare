@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/gondor/docker-volume-netshare/netshare"
+	"github.com/tinsible/docker-volume-netshare/netshare"
 )
 
 var VERSION string = ""
