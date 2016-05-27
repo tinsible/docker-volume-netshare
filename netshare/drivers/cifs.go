@@ -85,14 +85,22 @@ func (c cifsDriver) Unmount(r volume.Request) volume.Response {
 	hostdir := mountpoint(c.root, r.Name)
 	source := c.fixSource(r)
 
-	if c.mountm.HasMount(r.Name) {
-		if c.mountm.Count(r.Name) > 1 {
-			log.Infof("Skipping unmount for %s - in use by other containers", r.Name)
-			c.mountm.Decrement(r.Name)
-			return volume.Response{}
-		}
-		c.mountm.Decrement(r.Name)
+	if !c.mountm.HasMount(r.Name) {
+		return volume.Response{}
 	}
+
+	if c.mountm.Count(r.Name) > 1 {
+		log.Infof("Skipping unmount for %s - in use by other containers", r.Name)
+		c.mountm.Decrement(r.Name)
+		return volume.Response{}
+	}
+
+	if c.mountm.Count(r.Name) == 0 {
+		log.Infof("Skipping unmount for %s - not mounted", r.Name)
+		return volume.Response{}
+	}
+
+	c.mountm.Decrement(r.Name)
 
 	log.Infof("Unmounting volume %s from %s", source, hostdir)
 
