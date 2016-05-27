@@ -21,10 +21,10 @@ type efsDriver struct {
 	dnscache  map[string]string
 }
 
-func NewEFSDriver(root, az, nameserver string, resolve bool) efsDriver {
+func NewEFSDriver(root, mountsFilename string, az, nameserver string, resolve bool) efsDriver {
 
 	d := efsDriver{
-		volumeDriver: newVolumeDriver(root),
+		volumeDriver: newVolumeDriver(root, mountsFilename),
 		resolve:      resolve,
 		dnscache:     map[string]string{},
 	}
@@ -47,6 +47,7 @@ func NewEFSDriver(root, az, nameserver string, resolve bool) efsDriver {
 func (e efsDriver) Mount(r volume.Request) volume.Response {
 	e.m.Lock()
 	defer e.m.Unlock()
+	defer e.saveMounts()
 	hostdir := mountpoint(e.root, r.Name)
 	source := e.fixSource(r)
 
@@ -72,6 +73,7 @@ func (e efsDriver) Mount(r volume.Request) volume.Response {
 func (e efsDriver) Unmount(r volume.Request) volume.Response {
 	e.m.Lock()
 	defer e.m.Unlock()
+	defer e.saveMounts()
 	hostdir := mountpoint(e.root, r.Name)
 	source := e.fixSource(r)
 

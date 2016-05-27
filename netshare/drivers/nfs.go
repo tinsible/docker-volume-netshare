@@ -23,9 +23,9 @@ var (
 	EmptyMap = map[string]string{}
 )
 
-func NewNFSDriver(root string, version int, nfsopts string) nfsDriver {
+func NewNFSDriver(root string, mountsFilename string, version int, nfsopts string) nfsDriver {
 	d := nfsDriver{
-		volumeDriver: newVolumeDriver(root),
+		volumeDriver: newVolumeDriver(root, mountsFilename),
 		version:      version,
 		nfsopts:      map[string]string{},
 	}
@@ -40,6 +40,7 @@ func (n nfsDriver) Mount(r volume.Request) volume.Response {
 	log.Debugf("Entering Mount: %v", r)
 	n.m.Lock()
 	defer n.m.Unlock()
+	defer n.saveMounts()
 	hostdir := mountpoint(n.root, r.Name)
 	source := n.fixSource(r)
 
@@ -67,6 +68,7 @@ func (n nfsDriver) Unmount(r volume.Request) volume.Response {
 
 	n.m.Lock()
 	defer n.m.Unlock()
+	defer n.saveMounts()
 	hostdir := mountpoint(n.root, r.Name)
 
 	if n.mountm.HasMount(r.Name) {

@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"os/exec"
+	"bufio"
 )
 
 const (
@@ -33,11 +35,25 @@ type cifsCreds struct {
 	security string
 }
 
-func NewCIFSDriver(root, user, pass, domain, security, netrc string) cifsDriver {
+func NewCIFSDriver(root, mountsFilename string, user, pass, domain, security, netrc string) cifsDriver {
 	d := cifsDriver{
-		volumeDriver: newVolumeDriver(root),
+		volumeDriver: newVolumeDriver(root, mountsFilename),
 		creds:        &cifsCreds{user: user, pass: pass, domain: domain, security: security},
 		netrc:        parseNetRC(netrc),
+	}
+
+	r := d.volumeDriver.List(volume.Request{})
+	for _, v := range r.Volumes {
+		cnt := d.mountm.Count(v.Name)
+		if cnt > 0 {
+			hostdir := mountpoint(d.root, v.Name)
+			source := d.fixSource(v.Name)
+			if !checkMount(source, hostdir) {
+				log.Infof("Volume %s: mount point %s is not mounted but reported to have %d connections, resetting connection count to 0", v.Name, hostdir, cnt)
+				d.mountm.ResetCount(v.Name)
+				d.saveMounts()
+			}
+		}
 	}
 	return d
 }
@@ -54,8 +70,9 @@ func parseNetRC(path string) *netrc.Netrc {
 func (c cifsDriver) Mount(r volume.Request) volume.Response {
 	c.m.Lock()
 	defer c.m.Unlock()
+	defer c.saveMounts()
 	hostdir := mountpoint(c.root, r.Name)
-	source := c.fixSource(r)
+	source := c.fixSource(r.Name)
 	host := c.parseHost(r)
 
 	log.Infof("Mount: %s, %v", r.Name, r.Options)
@@ -79,11 +96,29 @@ func (c cifsDriver) Mount(r volume.Request) volume.Response {
 	return volume.Response{Mountpoint: hostdir}
 }
 
+func checkMount(source, hostdir string) bool {
+	if out, err := exec.Command("sh", "-c", "mount -t cifs").CombinedOutput(); err != nil {
+		log.Println(string(out))
+		return false
+	} else {
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		prefix := fmt.Sprintf("%s on %s", source, hostdir)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, prefix) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
 func (c cifsDriver) Unmount(r volume.Request) volume.Response {
 	c.m.Lock()
 	defer c.m.Unlock()
+	defer c.saveMounts()
 	hostdir := mountpoint(c.root, r.Name)
-	source := c.fixSource(r)
+	source := c.fixSource(r.Name)
 
 	if !c.mountm.HasMount(r.Name) {
 		return volume.Response{}
@@ -117,11 +152,11 @@ func (c cifsDriver) Unmount(r volume.Request) volume.Response {
 	return volume.Response{}
 }
 
-func (c cifsDriver) fixSource(r volume.Request) string {
-	if c.mountm.HasOption(r.Name, ShareOpt) {
-		return "//" + c.mountm.GetOption(r.Name, ShareOpt)
+func (c cifsDriver) fixSource(name string) string {
+	if c.mountm.HasOption(name, ShareOpt) {
+		return "//" + c.mountm.GetOption(name, ShareOpt)
 	}
-	return "//" + r.Name
+	return "//" + name
 }
 
 func (c cifsDriver) parseHost(r volume.Request) string {

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -42,6 +43,10 @@ support different mount types.
 
 == Version: %s - Built: %s ==
 	`
+
+	MountsFileFlag = "mounts-file"
+	MountsFileDefaultDir = "/var/lib/docker-volume-netshare"
+	MountsFileDefaultFilename = "mounts.%s"
 )
 
 var (
@@ -94,6 +99,7 @@ func setupFlags() {
 	rootCmd.PersistentFlags().Bool(TCPFlag, false, "Bind to TCP rather than Unix sockets.  Can also be set via NETSHARE_TCP_ENABLED")
 	rootCmd.PersistentFlags().String(PortFlag, ":8877", "TCP Port if --tcp flag is true.  :PORT for all interfaces or ADDRESS:PORT to bind.")
 	rootCmd.PersistentFlags().Bool(VerboseFlag, false, "Turns on verbose logging")
+	rootCmd.PersistentFlags().String(MountsFileFlag, filepath.Join(MountsFileDefaultDir, MountsFileDefaultFilename), "File to save active mounts to.")
 
 	cifsCmd.Flags().StringP(UsernameFlag, "u", "", "Username to use for mounts.  Can also set environment NETSHARE_CIFS_USERNAME")
 	cifsCmd.Flags().StringP(PasswordFlag, "p", "", "Password to use for mounts.  Can also set environment NETSHARE_CIFS_PASSWORD")
@@ -127,7 +133,7 @@ func execNFS(cmd *cobra.Command, args []string) {
 		}
 	}
 	options, _ := cmd.Flags().GetString(OptionsFlag)
-	d := drivers.NewNFSDriver(rootForType(drivers.NFS), version, options)
+	d := drivers.NewNFSDriver(rootForType(drivers.NFS), mountsFilename(cmd, drivers.NFS), version, options)
 	startOutput(fmt.Sprintf("NFS Version %d :: options: '%s'", version, options))
 	start(drivers.NFS, d)
 }
@@ -136,7 +142,7 @@ func execEFS(cmd *cobra.Command, args []string) {
 	az, _ := cmd.Flags().GetString(AvailZoneFlag)
 	resolve, _ := cmd.Flags().GetBool(NoResolveFlag)
 	ns, _ := cmd.Flags().GetString(NameServerFlag)
-	d := drivers.NewEFSDriver(rootForType(drivers.EFS), az, ns, !resolve)
+	d := drivers.NewEFSDriver(rootForType(drivers.EFS), mountsFilename(cmd, drivers.EFS), az, ns, !resolve)
 	startOutput(fmt.Sprintf("EFS :: availability-zone: %s, resolve: %v, ns: %s", az, resolve, ns))
 	start(drivers.EFS, d)
 }
@@ -147,9 +153,18 @@ func execCIFS(cmd *cobra.Command, args []string) {
 	domain := typeOrEnv(cmd, DomainFlag, EnvSambaWG)
 	security := typeOrEnv(cmd, SecurityFlag, EnvSambaSec)
 	netrc, _ := cmd.Flags().GetString(NetRCFlag)
-	d := drivers.NewCIFSDriver(rootForType(drivers.CIFS), user, pass, domain, security, netrc)
+	d := drivers.NewCIFSDriver(rootForType(drivers.CIFS), mountsFilename(cmd, drivers.CIFS), user, pass, domain, security, netrc)
 	startOutput(fmt.Sprintf("CIFS :: user: %s, pass: ***, domain: %s, secutity: %s, netrc: %s", user, domain, security, netrc))
 	start(drivers.CIFS, d)
+}
+
+func mountsFilename(cmd *cobra.Command, dt drivers.DriverType) string {
+	t, _ := cmd.Flags().GetString(MountsFileFlag)
+	filename := t
+	if strings.Count(t, "%s") > 0 {
+		filename = fmt.Sprintf(t, dt.String())
+	}
+	return filename
 }
 
 func startOutput(info string) {

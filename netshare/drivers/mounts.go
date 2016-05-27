@@ -4,6 +4,7 @@ import (
 	"errors"
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/go-plugins-helpers/volume"
+	"encoding/json"
 )
 
 const (
@@ -133,6 +134,14 @@ func (m *mountManager) Decrement(name string) int {
 	return 0
 }
 
+func (m *mountManager) ResetCount(name string) int {
+	c, found := m.mounts[name]
+	if found {
+		c.connections = 0
+	}
+	return 0
+}
+
 func (m *mountManager) GetVolumes(rootPath string) []*volume.Volume {
 
 	volumes := []*volume.Volume{}
@@ -141,4 +150,60 @@ func (m *mountManager) GetVolumes(rootPath string) []*volume.Volume {
 		volumes = append(volumes, &volume.Volume{Name: mount.name, Mountpoint: mount.hostdir})
 	}
 	return volumes
+}
+
+type mountManagerDoc struct {
+	Mounts map[string]*mount
+}
+
+func (m *mountManager) MarshalJSON() ([]byte, error) {
+	return json.Marshal(mountManagerDoc{
+		m.mounts,
+	})
+}
+
+func (m *mountManager) UnmarshalJSON(b []byte) error {
+	temp := &mountManagerDoc{}
+
+	if err := json.Unmarshal(b, &temp); err != nil {
+		return err
+	}
+
+	m.mounts = temp.Mounts
+
+	return nil
+}
+
+type mountDoc struct {
+	Name        string
+	Hostdir     string
+	Connections int
+	Opts        map[string]string
+	Managed     bool
+}
+
+func (m *mount) MarshalJSON() ([]byte, error) {
+	return json.Marshal(mountDoc{
+		m.name,
+		m.hostdir,
+		m.connections,
+		m.opts,
+		m.managed,
+	})
+}
+
+func (m *mount) UnmarshalJSON(b []byte) error {
+	temp := &mountDoc{}
+
+	if err := json.Unmarshal(b, &temp); err != nil {
+		return err
+	}
+
+	m.name = temp.Name
+	m.hostdir = temp.Hostdir
+	m.connections = temp.Connections
+	m.opts = temp.Opts
+	m.managed = temp.Managed
+
+	return nil
 }

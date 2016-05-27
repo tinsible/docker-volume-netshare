@@ -4,19 +4,51 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/go-plugins-helpers/volume"
 	"sync"
+	"io/ioutil"
+	"encoding/json"
+	"os"
 )
 
 type volumeDriver struct {
 	root   string
 	mountm *mountManager
 	m      *sync.Mutex
+	fname  string
 }
 
-func newVolumeDriver(root string) volumeDriver {
-	return volumeDriver{
+func newVolumeDriver(root string, mountsFilename string) volumeDriver {
+	mountm := NewVolumeManager()
+
+	dat, err := ioutil.ReadFile(mountsFilename)
+	if err == nil {
+		err = json.Unmarshal(dat, mountm)
+	}
+	if err != nil {
+		log.Warnf("Cannot read mounts file %s, will try to create a new one, error=%v", mountsFilename, err)
+	}
+
+	v := volumeDriver{
 		root:   root,
-		mountm: NewVolumeManager(),
+		mountm: mountm,
 		m:      &sync.Mutex{},
+		fname:  mountsFilename,
+	}
+	v.saveMounts()
+
+	return v
+}
+
+func (v volumeDriver) saveMounts() {
+	b, err := json.Marshal(v.mountm)
+	if err != nil {
+		log.Errorf("Error marshaling mounts data to json, error=%v", err)
+		panic(err)
+	}
+
+	err = ioutil.WriteFile(v.fname, b, 0600)
+	if err != nil {
+		log.Errorf("Error writing mounts file %s, error=%v, make sure that file's parent directory exists and is writable", v.fname, err)
+		os.Exit(1)
 	}
 }
 
@@ -25,6 +57,7 @@ func (v volumeDriver) Create(r volume.Request) volume.Response {
 
 	v.m.Lock()
 	defer v.m.Unlock()
+	defer v.saveMounts()
 
 	log.Debugf("Create volume -> name: %s, %v", r.Name, r.Options)
 
@@ -40,6 +73,7 @@ func (v volumeDriver) Remove(r volume.Request) volume.Response {
 	log.Debugf("Entering Remove: name: %s, options %v", r.Name, r.Options)
 	v.m.Lock()
 	defer v.m.Unlock()
+	defer v.saveMounts()
 
 	if err := v.mountm.Delete(r.Name); err != nil {
 		return volume.Response{Err: err.Error()}
