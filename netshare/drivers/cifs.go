@@ -20,6 +20,7 @@ const (
 	SecurityOpt = "security"
 	UidOpt = "uid"
 	GidOpt = "gid"
+	VersOpt = "vers"
 )
 
 type cifsDriver struct {
@@ -181,6 +182,7 @@ func (s cifsDriver) mountVolume(name, source, dest string, creds *cifsCreds) err
 	var domain = creds.domain
 	var security = creds.security
 	var uid, gid string
+	var vers string
 
 	if s.mountm.HasOptions(name) {
 		mopts := s.mountm.GetOptions(name)
@@ -201,6 +203,9 @@ func (s cifsDriver) mountVolume(name, source, dest string, creds *cifsCreds) err
 		}
 		if v, found := mopts[GidOpt]; found {
 			gid = v
+		}
+		if v, found := mopts[VersOpt]; found {
+			vers = v
 		}
 	}
 
@@ -227,6 +232,10 @@ func (s cifsDriver) mountVolume(name, source, dest string, creds *cifsCreds) err
 
 	if gid != "" {
 		opts.WriteString(fmt.Sprintf("gid=%s,", gid))
+	}
+
+	if vers != "" {
+		opts.WriteString(fmt.Sprintf("vers=%s,", vers))
 	}
 
 	opts.WriteString("rw' ")
