@@ -235,6 +235,7 @@ func (s cifsDriver) mountVolume(name, source, dest string, creds *cifsCreds) err
 	}
 
 	if vers != "" {
+		log.Debugf("Vers option present: %s", vers)
 		opts.WriteString(fmt.Sprintf("vers=%s,", vers))
 	}
 
